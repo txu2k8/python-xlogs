@@ -1,0 +1,12 @@
+include *.in
+include *.ini
+include *.rst
+include *.txt
+include .gitignore
+include LICENSE
+recursive-include xlogs *
+prune xlogs.egg-info
+
+
+global-exclude __pycache__ *.py[cod]
+global-exclude *.so *.dylib *.log

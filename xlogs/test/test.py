@@ -11,7 +11,7 @@ import time
 import logging
 import unittest
 
-from xlog import Log, log
+from xlogs import Log, log
 
 
 class XLogTC(unittest.TestCase):

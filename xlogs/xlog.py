@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: UTF-8 -*-
 """
-@file  : xlog.py
+@file  : xlogs.py
 @Time  : 2020/12/7 15:40
 @Author: Tao.Xu
 @Email : tao.xu2008@outlook.com
