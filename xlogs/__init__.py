@@ -9,19 +9,19 @@
 
 from .xlog import Log, log
 
-__version__ = '2020.12.07'
-__author__ = 'Tao.Xu'
-__description__ = 'logging toolkit'
-__email__ = 'tao.xu2008@outlook.com'
-__names__ = 'xlogs'
-__url__ = 'https://github.com/txu2k8/python-xlogs'
-
 """
 Default(config.ini):
 Save 30 days
 info logs rotating every 1MB
 error logs rotating every day
 """
+
+__version__ = '2020.12.07'
+__author__ = 'Tao.Xu'
+__description__ = 'logging toolkit'
+__email__ = 'tao.xu2008@outlook.com'
+__names__ = 'xlogs'
+__url__ = 'https://github.com/txu2k8/python-xlogs'
 
 
 if __name__ == '__main__':
