@@ -77,7 +77,7 @@ def log(log_file, config_file=None):
     """日志装饰器，用于测试函数的时候打印日志
     关于日志配置：可以参考官网配置： https://docs.python.org/3.7/library/logging.config.html
     Usage:
-    from pyunit_log import log
+    from xlogs import log
     if __name__ == '__main__':
         @log(log_file='./logs',config_file=None)
         def division():

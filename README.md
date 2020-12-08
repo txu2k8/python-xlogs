@@ -4,7 +4,7 @@ logging toolkit
 
 # install
 ```commandline
-pip install pyunit-log
+pip install xlogs
 ```
 
 # Usage
