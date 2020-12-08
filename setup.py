@@ -52,7 +52,7 @@ def _find_packages():
 setup(
     name='xlogs',
     python_requires='>=3.4.0',
-    version='1.0.0',
+    version='1.0.1',
     description="A logging toolkit",
     long_description=read_file('README.md'),
     long_description_content_type="text/markdown",
