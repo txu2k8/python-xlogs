@@ -17,8 +17,8 @@ import logging
 import threading
 try:
     import coloredlogs
-except ImportError:
-    pass
+except ImportError as e:
+    print(e)
 from logging import handlers
 from logging.handlers import RotatingFileHandler
 import unittest
