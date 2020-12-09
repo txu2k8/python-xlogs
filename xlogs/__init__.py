@@ -7,8 +7,8 @@
 @Email : tao.xu2008@outlook.com
 """
 
-from .xlog import Log, log
-
+from .xlog import LogConfig, log
+from .xlog2 import *
 """
 Default(config.ini):
 Save 30 days

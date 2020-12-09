@@ -11,7 +11,7 @@ import time
 import logging
 import unittest
 
-from xlogs import Log, log
+from xlogs import LogConfig, log
 
 
 class XLogTC(unittest.TestCase):
@@ -24,7 +24,7 @@ class XLogTC(unittest.TestCase):
 
     @unittest.skip("skip")
     def test_1_log(self):
-        @log(log_file='./')
+        @log(log_dir='./')
         def func():
             time.sleep(2)
             return 5
@@ -32,7 +32,7 @@ class XLogTC(unittest.TestCase):
 
     @unittest.skip("skip")
     def test_2_log(self):
-        Log("./log2")
+        LogConfig("./log2")
         logger = logging.getLogger()
         logger.info("info oooooo")
         logger.debug("debug ggggg")
@@ -41,13 +41,13 @@ class XLogTC(unittest.TestCase):
 
     @unittest.skip("skip")
     def test_3_log(self):
-        Log("./log3_1/")
+        LogConfig("./log3_1/")
         logger1 = logging.getLogger()
         logger1.info("logger1 info oooooo")
         logger1.debug("logger1 debug ggggg")
         logger1.error("logger1 err rrrr")
 
-        Log("./log3_2/").log_reset()
+        LogConfig("./log3_2/").reset()
         logger2 = logging.getLogger()
         logger2.info("logger2 info oooooo")
         logger2.debug("logger2 debug ggggg")
@@ -55,8 +55,8 @@ class XLogTC(unittest.TestCase):
         self.assertTrue(1)
 
     def test_4_color_log(self):
-        from xlogs.xlog2 import init_logger
-        logger = init_logger()
+        from xlogs import get_logger
+        logger = get_logger(debug=True)
         logger.info("info oooooo")
         logger.debug("debug ggggg")
         logger.error("err rrrr")

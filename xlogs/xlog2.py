@@ -15,7 +15,10 @@ import shutil
 import platform
 import logging
 import threading
-import coloredlogs
+try:
+    import coloredlogs
+except ImportError:
+    pass
 from logging import handlers
 from logging.handlers import RotatingFileHandler
 import unittest
@@ -23,10 +26,10 @@ import unittest
 
 __all__ = [
     'debug', 'info', 'warning', 'error', 'critical',
-    'init_logger', 'set_loglevel', 'get_inited_logger_name', 'basic_config',
+    'get_logger', 'set_loglevel', 'get_inited_logger_name', 'basic_config',
     'ROTATION', 'INFINITE', 'parse_msg',
     'backtrace_info', 'backtrace_debug', 'backtrace_error', 'backtrace_critical',
-    'debug_if', 'info_if', 'error_if', 'warn_if', 'critical_if', 'get_logger'
+    'debug_if', 'info_if', 'error_if', 'warn_if', 'critical_if',
 ]
 
 """ logging config
@@ -118,10 +121,7 @@ class _Singleton(object):
     Make your class singeton
 
     example::
-
-        from tlib import decorators
-
-        @decorators.Singleton
+        @_Singleton
         class YourClass(object):
             def __init__(self):
             pass
@@ -183,17 +183,45 @@ class _CompressedRotatingFileHandler(RotatingFileHandler):
                 self.stream = self._open()
 
 
-@_Singleton
-class _LoggerMan(object):
-    _instance = None
+class LoggerConfig(object):
     _mylogger = None
-    _maxsize = 0
-    _b_rotation = False
-    _logfile = ''
-    _logtype = ROTATION
+    _lock = threading.Lock()  # 实现线程锁，增加安全性
 
-    def __init__(self):
-        pass
+    def __init__(self, logger_name="test", logfile='message.log', log_level=FILE_LEVEL,
+                 output_logfile=True, maxsize=FILE_MAXBYTES,
+                 backup_count=FILE_BACKUPCOUNT, compress=False, gen_wf=False,
+                 print_console=True, colored_console=True, reset=False):
+        self.logger_name = logger_name
+        self.logfile = logfile
+        self.log_level = log_level
+        self.output_logfile = output_logfile
+        self.maxsize = maxsize
+        self.backup_count = backup_count
+        self.compress = compress
+        self.gen_wf = gen_wf
+        self.print_console = print_console
+        self.colored_console = colored_console
+        self.reset = reset
+
+        if not hasattr(LoggerConfig, "_init"):  # 增加初始化屬性
+            with LoggerConfig._lock:  # 加锁防止多线程环境中两个线程同时实例化
+                if not hasattr(LoggerConfig, "_init"):
+                    self.set_logger()
+                    self.config_logger()
+                    LoggerConfig._init = True
+        elif self.reset:
+            with LoggerConfig._lock:
+                self.reset_logger()
+                self.config_logger()
+                LoggerConfig._init = True
+
+    def __new__(cls, *args, **kwargs):
+        """实现单例模式"""
+        if not hasattr(LoggerConfig, "_instance"):
+            with LoggerConfig._lock:  # 加锁防止多线程环境中两个线程同时实例化
+                if not hasattr(LoggerConfig, "_instance"):
+                    LoggerConfig._instance = super(LoggerConfig, cls).__new__(cls)
+        return LoggerConfig._instance
 
     @property
     def m_logger(self):
@@ -201,47 +229,34 @@ class _LoggerMan(object):
             raise LoggerException('The logger has not been initalized Yet. Call init_comlog first')
         return self._mylogger
 
-    def set_logger(self, logger_name):
+    def set_logger(self):
         if self._mylogger is not None:
             raise LoggerException('WARNING!!! The logger {0} has been initialized already.'.format(self._mylogger))
         logging.root = logging.RootLogger(logging.WARNING)
-        logger = logging.getLogger(logger_name)
+        logger = logging.getLogger(self.logger_name)
         self._mylogger = logger
         self._mylogger.handlers = []
         self._mylogger.setLevel(logging.DEBUG)
 
-    def reset_logger(self, logger_name):
+    def reset_logger(self):
         if self._mylogger:
             del self._mylogger
         logging.root = logging.RootLogger(logging.WARNING)
-        logger = logging.getLogger(logger_name)
+        logger = logging.getLogger(self.logger_name)
         self._mylogger = logger
         # logging.root = logger
         self._mylogger.handlers = []
         self._mylogger.setLevel(logging.DEBUG)
 
-    @property
-    def is_initialized(self):
-        """Initialized or not"""
-        if self._mylogger is None:
-            return False
-        else:
-            # self._mylogger.debug('{0} has been already initalized'.format(self._mylogger))
-            return True
-
-    @staticmethod
-    def verify_path(file_path):
-        if not os.path.isdir(file_path):
-            try:
-                os.makedirs(file_path)
-            except OSError as e:
-                print(e)
-
-    def verify_logfile(self, logfile):
-        logfile = logfile + '.log' if not logfile.endswith('.log') else logfile
+    def verify_logfile(self):
+        logfile = self.logfile + '.log' if not self.logfile.endswith('.log') else self.logfile
         logfile_split = os.path.split(logfile)
         log_path = os.path.join(os.getcwd(), 'log', logfile_split[0])
-        self.verify_path(log_path)
+        if not os.path.isdir(log_path):
+            try:
+                os.makedirs(log_path)
+            except OSError as e:
+                print(e)
 
         log_name = logfile_split[1]
         logfile = os.path.join(log_path, log_name)
@@ -257,141 +272,71 @@ class _LoggerMan(object):
                 raise LoggerException(e)
         elif not os.path.isfile(logfile):
             raise LoggerException('The log file exists. But NOT a regular file')
+        self.logfile = logfile
 
-        return logfile
-
-    def config_file_logger(self, logfile, loglevel=FILE_LEVEL, logtype=ROTATION,
-                           maxsize=FILE_MAXBYTES, rotation_count=FILE_BACKUPCOUNT, compress_log=False, gen_wf=False):
-        logfile = self.verify_logfile(logfile)
+    def config_file_handler(self):
+        self.verify_logfile()
         # Config the file handler
-        if logtype == ROTATION:
-            if compress_log:
-                fdhandler = _CompressedRotatingFileHandler(logfile, mode='a', maxBytes=maxsize,
-                                                           backupCount=rotation_count)
-            else:
-                fdhandler = handlers.RotatingFileHandler(logfile, mode='a', maxBytes=maxsize,
-                                                         backupCount=rotation_count, encoding='utf-8')
+        # fd_handler = logging.FileHandler(logfile, 'a', encoding='utf-8')
+        if self.compress:
+            fd_handler = _CompressedRotatingFileHandler(
+                self.logfile, mode='a', maxBytes=self.maxsize, backupCount=self.backup_count)
         else:
-            fdhandler = logging.FileHandler(logfile, 'a', encoding='utf-8')
+            fd_handler = handlers.RotatingFileHandler(
+                self.logfile, mode='a', maxBytes=self.maxsize,
+                backupCount=self.backup_count, encoding='utf-8')
         formatter = logging.Formatter(FILE_FORMATE)
-        fdhandler.setFormatter(formatter)
-        fdhandler.setLevel(loglevel)
-        if gen_wf:
+        fd_handler.setFormatter(formatter)
+        fd_handler.setLevel(self.log_level)
+        if self.gen_wf:
             # add .wf handler
-            file_wf = str(logfile) + '.wf'
+            file_wf = str(self.logfile) + '.wf'
             warn_handler = logging.FileHandler(file_wf, 'a', encoding='utf-8')
             warn_handler.setLevel(logging.WARNING)
             warn_handler.setFormatter(formatter)
             self._mylogger.addHandler(warn_handler)
-            fdhandler.addFilter(_MsgFilter(logging.WARNING))
+            fd_handler.addFilter(_MsgFilter(logging.WARNING))
+        self._mylogger.addHandler(fd_handler)
 
-        self._mylogger.addHandler(fdhandler)
-
-    def config_console_logger(self, log_level=CONSOLE_LEVEL, colored_console=True):
+    def config_console_handler(self):
         # Config the console handler
         # print('print_console enabled, will print to stdout')
-        if colored_console:
-            coloredlogs.install(logger=self._mylogger, level=log_level, fmt=CONSOLE_FORMATE,
+        if self.colored_console and 'coloredlogs' in sys.modules and os.isatty(2):
+            coloredlogs.install(logger=self._mylogger, level=self.log_level, fmt=CONSOLE_FORMATE,
                                 field_styles=DEFAULT_FIELD_STYLES, level_styles=DEFAULT_LEVEL_STYLES)
         else:
             formatter = logging.Formatter(fmt=CONSOLE_FORMATE, datefmt=DATE_FORMATE)
             streamhandler = logging.StreamHandler()
-            streamhandler.setLevel(log_level)
+            streamhandler.setLevel(self.log_level)
             streamhandler.setFormatter(formatter)
             self._mylogger.addHandler(streamhandler)
 
+    def config_logger(self):
+        if self.output_logfile:
+            self.config_file_handler()
+        if self.print_console:
+            self.config_console_handler()
+        global INITED_LOGGER
+        if self.logger_name not in INITED_LOGGER:
+            INITED_LOGGER.append(self.logger_name)
 
-def init_logger(logfile='debug.log', logger_name='test', log_level=FILE_LEVEL,
-                log_type=ROTATION, maxsize=FILE_MAXBYTES, rotation_count=FILE_BACKUPCOUNT,
-                output_logfile=True, compress_log=False, gen_wf=False,
-                print_console=True, colored_console=True, reset_logger=False):
+
+def get_logger(*args, debug=False, **kwargs):
     """
-    Initialize your logging
-
-    :param logger_name:
-        Unique logger name
-    :param log_level:
-        4 default levels: log.DEBUG log.INFO log.ERROR log.CRITICAL
-    :param logfile:
-        log file. Will try to create it if no existence
-    :param log_type:
-        Two type candidiates: log.ROTATION and log.INFINITE
-
-        log.ROTATION will let logfile switch to a new one (30 files at most).
-        When logger reaches the 30th logfile, will overwrite from the
-        oldest to the most recent.
-
-        log.INFINITE will write on the logfile infinitely
-    :param maxsize:
-        maxmum log size with byte
-    :param rotation_count:
-        maxmum log count with int
-    :param output_logfile:
-        output log to file
-    :param compress_log:
-        compress log
-    :param gen_wf:
-        print log msges with level >= WARNING to file (${logfile}.wf)
-    :param print_console:
-        print to stdout or not?
-    :param colored_console:
-        print to stdout colored
-    :param reset_logger:
-        reset logger
-
-    *E.g.*
-    ::
-        import logging
-        from tlib import log
-        log.init_logger(
-            '/home/work/test/test.log',
-            'test'
-        )
-        log.info('test xxx')
-        log.critical('test critical')
-
+    Config with LoggerConfig and then get logger
+    :param args:
+    :param debug:
+    :param kwargs:
+    :return:
     """
-
-    logger_man = _LoggerMan()
-
-    # logging.root = logging.RootLogger(logging.WARNING)
-    # new_logger = logging.getLogger(logger_name)
-    if reset_logger:
-        logger_man.reset_logger(logger_name)
-    elif not logger_man.is_initialized:
-        logger_man.set_logger(logger_name)
-    else:
-        # Not need init the initialized logger
-        return logging.getLogger(logger_name)
-
-    if output_logfile:
-        logger_man.config_file_logger(logfile, log_level, log_type, maxsize, rotation_count, compress_log, gen_wf)
-    if print_console:
-        logger_man.config_console_logger(CONSOLE_LEVEL, colored_console)
-    global INITED_LOGGER
-    if logger_name not in INITED_LOGGER:
-        INITED_LOGGER.append(logger_name)
-
-    new_logger = logging.getLogger(logger_name)
-    new_logger.info('Log path: {0}'.format(logfile))
-    new_logger.debug('-' * 20 + '{0} Initialized Successfully'.format(new_logger) + '-' * 20)
-    return new_logger
-
-
-def get_logger(logfile='debug.log', logger_name='pztest', output_logfile=True,
-               compress_log=False, gen_wf=False, print_console=True,
-               colored_console=True, debug=False, reset_logger=False):
     if debug:
         global FILE_LEVEL, CONSOLE_LEVEL, CONSOLE_FORMATE, FILE_FORMATE
         FILE_LEVEL = logging.DEBUG
         CONSOLE_LEVEL = logging.DEBUG
         CONSOLE_FORMATE = DEBUG_FORMATE
         FILE_FORMATE = DEBUG_FORMATE
-
-    test_logger = init_logger(logfile, logger_name, output_logfile=output_logfile, compress_log=compress_log,
-                              gen_wf=gen_wf, print_console=print_console, colored_console=colored_console,
-                              reset_logger=reset_logger)
-    return test_logger
+    lcf = LoggerConfig(*args, **kwargs)
+    return logging.getLogger(lcf.logger_name)
 
 
 def _line(back=0):
@@ -436,7 +381,7 @@ def backtrace_info(msg, back_trace_len=0):
     """
     try:
         msg = _log_file_func_info(msg, back_trace_len)
-        logger_man = _LoggerMan()
+        logger_man = LoggerConfig()
         logger_man.m_logger.info(msg)
     except LoggerException:
         return
@@ -450,7 +395,7 @@ def backtrace_debug(msg, back_trace_len=0):
     """
     try:
         msg = _log_file_func_info(msg, back_trace_len)
-        logger_man = _LoggerMan()
+        logger_man = LoggerConfig()
         logger_man.m_logger.debug(msg)
     except LoggerException:
         return
@@ -464,7 +409,7 @@ def backtrace_warn(msg, back_trace_len=0):
     """
     try:
         msg = _log_file_func_info(msg, back_trace_len)
-        logger_man = _LoggerMan()
+        logger_man = LoggerConfig()
         logger_man.m_logger.warn(msg)
     except LoggerException:
         return
@@ -478,7 +423,7 @@ def backtrace_error(msg, back_trace_len=0):
     """
     try:
         msg = _log_file_func_info(msg, back_trace_len)
-        logger_man = _LoggerMan()
+        logger_man = LoggerConfig()
         logger_man.m_logger.error(msg)
     except LoggerException:
         return
@@ -492,7 +437,7 @@ def backtrace_critical(msg, back_trace_len=0):
     """
     try:
         msg = _log_file_func_info(msg, back_trace_len)
-        logger_man = _LoggerMan()
+        logger_man = LoggerConfig()
         logger_man.m_logger.critical(msg)
     except LoggerException:
         return
@@ -504,7 +449,7 @@ def set_loglevel(logging_level):
     """
     change log level during runtime
     """
-    logger_man = _LoggerMan()
+    logger_man = LoggerConfig()
     logger_man.m_logger.setLevel(logging_level)
 
 
@@ -647,7 +592,7 @@ class LogTestCase(unittest.TestCase):
 
     def test_2(self):
         logfile = "test_2.log"
-        logger = get_logger(logfile, logger_name='test2', debug=True)
+        logger = get_logger(logfile=logfile, logger_name='test2', debug=True)
         logger.info('test_2 start ...')
         logger.warning('test_2 hello,world')
         logger.debug('test_2 hello,world')
@@ -665,7 +610,7 @@ class LogTestCase(unittest.TestCase):
         logger.critical('test_2_2 hello,world')
 
     def test_3(self):
-        logger = get_logger(logger_name='test2', logfile='test.log', reset_logger=True)
+        logger = get_logger(logger_name='test2', logfile='test.log', reset=True)
         logger.info('test_3 start ...')
         logger.warning('test_3 hello,world')
         logger.debug('test_3 hello,world')

@@ -1,7 +1,7 @@
 #!/bin/bash
 # ##########################################################################
 # Author: txu
-# Brief:  Upload tlib to pypi
+# Brief:  Upload xlogs to pypi
 #
 # Returns:
 #   pass: 0
